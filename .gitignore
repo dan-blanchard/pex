@@ -9,3 +9,5 @@
 /.idea
 /.coverage*
 /htmlcov
+.cache/*
+.eggs/*
