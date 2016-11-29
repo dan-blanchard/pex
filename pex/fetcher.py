@@ -19,8 +19,8 @@ else:
 
 
 def normalize_name(name):
-    """Normalize package name according to PEP-503"""
-    return re.sub(r"[-_.]+", "-", name).lower()
+  """Normalize package name according to PEP-503"""
+  return re.sub(r"[-_.]+", "-", name).lower()
 
 
 class FetcherBase(AbstractClass):
