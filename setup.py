@@ -69,6 +69,7 @@ setup(
     ],
     'console_scripts': [
       'pex = pex.bin.pex:main',
+      'pip-pex = pex.commands.pex:main'
     ],
   },
 )

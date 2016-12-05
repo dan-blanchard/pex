@@ -177,7 +177,6 @@ class CacheHelper(object):
               shutil.copyfileobj(zi, fp)
 
       rename_if_empty(target_dir_tmp, target_dir)
-
     dist = DistributionHelper.distribution_from_path(target_dir)
     assert dist is not None, 'Failed to cache distribution %s' % source
     return dist

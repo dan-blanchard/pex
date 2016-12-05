@@ -55,8 +55,8 @@ class PEXBuilder(object):
 
   BOOTSTRAP_DIR = ".bootstrap"
 
-  def __init__(self, path=None, interpreter=None, chroot=None, pex_info=None, preamble=None,
-               copy=False):
+  def __init__(self, path=None, chroot=None, pex_info=None, preamble=None,
+               copy=False, requirement_set=None):
     """Initialize a pex builder.
 
     :keyword path: The path to write the PEX as it is built.  If ``None`` is specified,
@@ -78,20 +78,16 @@ class PEXBuilder(object):
     self._chroot = chroot or Chroot(path or safe_mkdtemp())
     self._pex_info = pex_info or PexInfo.default()
     self._frozen = False
-    self._interpreter = interpreter or PythonInterpreter.get()
-    self._shebang = self._interpreter.identity.hashbang()
     self._logger = logging.getLogger(__name__)
     self._preamble = to_bytes(preamble or '')
     self._copy = copy
     self._distributions = set()
+    self._shebang = None
+    self._requirement_set = requirement_set
 
   def _ensure_unfrozen(self, name='Operation'):
     if self._frozen:
       raise self.ImmutablePEX('%s is not allowed on a frozen PEX!' % name)
-
-  @property
-  def interpreter(self):
-    return self._interpreter
 
   def chroot(self):
     return self._chroot
@@ -112,7 +108,6 @@ class PEXBuilder(object):
     chroot_clone = self._chroot.clone(into=into)
     clone = self.__class__(
         chroot=chroot_clone,
-        interpreter=self._interpreter,
         pex_info=self._pex_info.copy(),
         preamble=self._preamble,
         copy=self._copy)
@@ -327,15 +322,6 @@ class PEXBuilder(object):
             self._chroot.write(bytes(import_string, 'UTF-8'), sub_path)
           init_digest.add(sub_path)
 
-  def _precompile_source(self):
-    source_relpaths = [path for label in ('source', 'executable', 'main', 'bootstrap')
-                       for path in self._chroot.filesets.get(label, ()) if path.endswith('.py')]
-
-    compiler = Compiler(self.interpreter)
-    compiled_relpaths = compiler.compile(self._chroot.path(), source_relpaths)
-    for compiled in compiled_relpaths:
-      self._chroot.touch(compiled, label='bytecode')
-
   def _prepare_manifest(self):
     self._chroot.write(self._pex_info.dump().encode('utf-8'), PexInfo.PATH, label='manifest')
 
@@ -361,7 +347,7 @@ class PEXBuilder(object):
 
     wrote_setuptools = False
     setuptools = DistributionHelper.distribution_from_path(
-        self._interpreter.get_location('setuptools'),
+        self._requirement_set.get_requirement('setuptools').source_dir,
         name='setuptools')
 
     if setuptools is None:
@@ -393,10 +379,8 @@ class PEXBuilder(object):
           self._chroot.write(provider.get_resource_string(source_name, fn),
             os.path.join(self.BOOTSTRAP_DIR, target_location, fn), 'bootstrap')
 
-  def freeze(self, bytecode_compile=True):
+  def freeze(self):
     """Freeze the PEX.
-
-    :param bytecode_compile: If True, precompile .py files into .pyc files when freezing code.
 
     Freezing the PEX writes all the necessary metadata and environment bootstrapping code.  It may
     only be called once and renders the PEXBuilder immutable.
@@ -407,21 +391,18 @@ class PEXBuilder(object):
     self._prepare_manifest()
     self._prepare_bootstrap()
     self._prepare_main()
-    if bytecode_compile:
-      self._precompile_source()
     self._frozen = True
 
-  def build(self, filename, bytecode_compile=True):
+  def build(self, filename):
     """Package the PEX into a zipfile.
 
     :param filename: The filename where the PEX should be stored.
-    :param bytecode_compile: If True, precompile .py files into .pyc files.
 
     If the PEXBuilder is not yet frozen, it will be frozen by ``build``.  This renders the
     PEXBuilder immutable.
     """
     if not self._frozen:
-      self.freeze(bytecode_compile=bytecode_compile)
+      self.freeze()
     try:
       os.unlink(filename + '~')
       self._logger.warn('Previous binary unexpectedly exists, cleaning: %s' % (filename + '~'))
